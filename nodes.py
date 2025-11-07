@@ -160,10 +160,10 @@ def get_model(config):
     n_ctx = config["n_ctx"]
     n_gpu_layers = config["n_gpu_layers"]
 
-    model_path = folder_paths.get_file_path("llm_vl", model)
+    model_path = folder_paths.get_full_path("llm_vl", model)
     chat_handler = None
     if mmproj_model and mmproj_model != "None":
-        mmproj_path = folder_paths.get_file_path("llm_vl", mmproj_model) 
+        mmproj_path = folder_paths.get_full_path("llm_vl", mmproj_model) 
         if model_type == "None":
             raise ValueError('"model_type" cannot be None!')
         print(f"Loading mmproj from {mmproj_path}")
