@@ -165,7 +165,7 @@ class llama_cpp_model_loader:
             "mmproj_model": (["None"]+folder_paths.get_filename_list("LLM"), {"default": "None"}),
             "model_type": (["None","Qwen3-VL", "Qwen2.5-VL", "LLaVA-1.5", "LLaVA-1.6", "Moondream2", "nanoLLaVA", "llama3-Vision-Alpha", "MiniCPM-v2.6", "MiniCPM-v4"], {"default": "None"}),
             "think_mode": ("BOOLEAN", {"default": False}),
-            "n_ctx": ("INT", {"default": 4096, "min": 512, "max": 327680, "step": 128}),
+            "n_ctx": ("INT", {"default": 8192, "min": 512, "max": 327680, "step": 128}),
             "n_gpu_layers": ("INT", {"default": -1, "min": -1, "max": 4096, "step": 1}),
             "keep_model_loaded": ("BOOLEAN", {"default": True}),
             }
