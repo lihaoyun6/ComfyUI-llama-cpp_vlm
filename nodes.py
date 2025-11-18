@@ -33,7 +33,8 @@ preset_prompts = {
     "Creative - Detailed Analysis": "Describe this @ in detail, breaking down the subject, attire, accessories, background, and composition into separate sections.",
     "Creative - Summarize Video": "Summarize the key events and narrative points in this video.",
     "Creative - Short Story": "Write a short, imaginative story inspired by this @ or video.",
-    "Creative - Refine & Expand Prompt": "Refine and enhance the following user prompt for creative text-to-@ generation. Keep the meaning and keywords, make it more expressive and visually rich. Output **only the improved prompt text itself**, without any reasoning steps, thinking process, or additional commentary."
+    "Creative - Refine & Expand Prompt": "Refine and enhance the following user prompt for creative text-to-@ generation. Keep the meaning and keywords, make it more expressive and visually rich. Output **only the improved prompt text itself**, without any reasoning steps, thinking process, or additional commentary.",
+    "Vision - *Bounding Box": 'Locate every instance that belongs to the following categories: "#". Report bbox coordinates in {"bbox_2d": [x1, y1, x2, y2], "label": "string"} JSON format.'
 }
 preset_tags = list(preset_prompts.keys())
 
@@ -192,7 +193,7 @@ class llama_cpp_instruct_adv:
                 "llmamodel": ("LLAMACPPMODEL",),
                 "parameters": ("LLAMACPPARAMS",),
                 "preset_prompt": (preset_tags, {"default": preset_tags[0]}),
-                "custom_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "If provided, this will override the preset prompt."}),
+                "custom_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": 'For preset hints marked with an "*", this will be used to fill the placeholder (e.g., Object names in BBox detection)\nOtherwise, this will override the preset prompts.'}),
                 "system_prompt": ("STRING", {"multiline": True, "default": ""}),
                 "video_input": ("BOOLEAN", {
                     "default": False,
@@ -242,10 +243,11 @@ class llama_cpp_instruct_adv:
             messages.append({"role": "system", "content": system_prompts})
             
         user_content = []
-        if custom_prompt.strip():
+        if custom_prompt.strip() and "*" not in preset_prompt:
             user_content.append({"type": "text", "text": custom_prompt})
         else:
-            user_content.append({"type": "text", "text": preset_prompts[preset_prompt].replace("@", "video" if video_input else "image")})
+            p = preset_prompts[preset_prompt].replace("#", custom_prompt.strip()).replace("@", "video" if video_input else "image")
+            user_content.append({"type": "text", "text": p})
             
         if images is not None:
             if not hasattr(self.chat_handler, "clip_model_path") or self.chat_handler.clip_model_path is None:
@@ -378,6 +380,11 @@ class json_to_bbox:
             "required": {
                 "json": ("STRING", {"forceInput": True}),
                 "mode": (["simple","Qwen3-VL", "Qwen2-VL"], {"default": "simple"}),
+                "label": ("STRING", {
+                    "default":"",
+                    "multiline": False,
+                    "tooltip": "Select only the BBoxes with specific labels."
+                }),
             },
             "optional": {
                 "image": ("IMAGE",),
@@ -389,8 +396,13 @@ class json_to_bbox:
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vllm"
     
-    def process(self, json, mode, image=None):
+    def process(self, json, mode, label, image=None):
         bboxes = parse_json(json)
+        if label != "":
+            try:
+                bboxes = [item for item in bboxes if item["label"] == label]
+            except Exception:
+                bboxes = [item for item in bboxes if item.get("text_content") == label]
         if image is not None:
             image = draw_bbox(image, bboxes, mode)
         if mode in ["Qwen3-VL", "Qwen2-VL"]:
@@ -412,7 +424,7 @@ class SEG:
         self.control_net_wrapper = control_net_wrapper
         
     def __repr__(self):
-        return f"SEG(cropped_image={self.cropped_image is not None}, cropped_mask=shape{self.cropped_mask.shape}, confidence={self.confidence}, ...)"
+        return (f"SEG(cropped_image={self.cropped_image}, cropped_mask=shape{self.cropped_mask.shape}, confidence={self.confidence}, bbox={self.bbox}, label='{self.label}'), control_net_wrapper={self.control_net_wrapper}")
     
 class bbox_to_segs:
     @classmethod
@@ -421,8 +433,8 @@ class bbox_to_segs:
             "required": {
                 "bboxes": ("BBOX",),
                 "image": ("IMAGE",),
+                "dilation": ("INT", {"default": 10, "min": 0, "max": 200, "step": 1}),
                 "feather": ("INT", {"default": 10, "min": 0, "max": 100, "step": 1}),
-                "bbox_expansion": ("INT", {"default": 10, "min": 0, "max": 200, "step": 1}),
             }
         }
     
@@ -430,7 +442,7 @@ class bbox_to_segs:
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vllm"
     
-    def process(self, bboxes, image, feather, bbox_expansion):
+    def process(self, bboxes, image, dilation, feather):
         if not bboxes:
             print("Warning: BBoxToSEGS received an empty BBox list. Returning empty SEGS.")
             shape = (image.shape[1], image.shape[2])
@@ -448,10 +460,10 @@ class bbox_to_segs:
                 continue
             
             x1, y1, x2, y2 = map(int, bbox)
-            x1_exp = x1 - bbox_expansion
-            y1_exp = y1 - bbox_expansion
-            x2_exp = x2 + bbox_expansion
-            y2_exp = y2 + bbox_expansion
+            x1_exp = x1 - dilation
+            y1_exp = y1 - dilation
+            x2_exp = x2 + dilation
+            y2_exp = y2 + dilation
             
             crop_region = [x1_exp, y1_exp, x2_exp, y2_exp]
             crop_w = x2_exp - x1_exp
@@ -462,8 +474,8 @@ class bbox_to_segs:
                 continue
             
             local_mask_np = np.zeros((crop_h, crop_w), dtype=np.float32)
-            local_x1 = bbox_expansion
-            local_y1 = bbox_expansion
+            local_x1 = dilation
+            local_y1 = dilation
             local_x2 = local_x1 + (x2 - x1)
             local_y2 = local_y1 + (y2 - y1)
             local_mask_np[local_y1:local_y2, local_x1:local_x2] = 1.0
