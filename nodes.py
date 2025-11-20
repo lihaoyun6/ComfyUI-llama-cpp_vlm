@@ -481,7 +481,7 @@ class bbox_to_segs:
                 "bboxes": ("BBOX",),
                 "image": ("IMAGE",),
                 "dilation": ("INT", {"default": 10, "min": 0, "max": 200, "step": 1}),
-                "feather": ("INT", {"default": 10, "min": 0, "max": 100, "step": 1}),
+                "feather": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
             }
         }
     
@@ -567,7 +567,7 @@ class bbox_to_mask:
                 "bboxes": ("BBOX",),
                 "image": ("IMAGE",),
                 "dilation": ("INT", {"default": 10, "min": 0, "max": 200, "step": 1}),
-                "feather": ("INT", {"default": 10, "min": 0, "max": 100, "step": 1}),
+                "feather": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
             }
         }
     
