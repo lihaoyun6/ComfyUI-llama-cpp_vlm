@@ -1,2 +1,4 @@
 diskcache
 scipy
+numpy
+pillow
