@@ -339,11 +339,18 @@ class llama_cpp_instruct_adv:
                 output = self.llm.create_chat_completion(messages=messages, seed=seed, **filtered_params)
                 text = output['choices'][0]['message']['content']
                 text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
+        else:
+            parameters.pop("image_min_tokens", None)
+            parameters.pop("image_max_tokens", None)
+            messages.append({"role": "user", "content": user_content})
+            output = self.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
+            text = output['choices'][0]['message']['content']
+            text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
         
-                if not keep_model_loaded:
-                    self.clean()
+        if not keep_model_loaded:
+            self.clean()
         
-                return (text,)
+        return (text,)
 
 class llama_cpp_instruct:
     @classmethod
@@ -362,6 +369,16 @@ class llama_cpp_instruct:
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vllm"
     
+    def clean(self):
+        self.llm.close()
+        try:
+            self.chat_handler._exit_stack.close()
+        except Exception:
+            pass
+        del self.llm, self.chat_handler
+        gc.collect()
+        mm.soft_empty_cache()
+    
     def process(self, llamamodel, parameters, prompt, seed):
         mm.soft_empty_cache()
         keep_model_loaded = llamamodel.get('keep_model_loaded', True)
@@ -370,6 +387,7 @@ class llama_cpp_instruct:
         filtered_params = {k: v for k, v in parameters.items() if k not in {'image_min_tokens', 'image_max_tokens'}}
         
         if not hasattr(self, "llm") or self.current_config != llamamodel:
+            print("[llama-cpp_vllm] Reloading model...")
             if hasattr(self, "llm"):
                 self.llm.close()
                 try:
@@ -384,28 +402,13 @@ class llama_cpp_instruct:
         user_content.append({"type": "text", "text": prompt})
         messages.append({"role": "user", "content": user_content})
         
-        output = self.llm.create_chat_completion(
-            messages=messages,
-            seed=seed,
-            **parameters
-        )
+        output = self.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
+        text = output['choices'][0]['message']['content']
+        text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
         
         if not keep_model_loaded:
-            self.llm.close()
-            try:
-                self.chat_handler._exit_stack.close()
-            except Exception:
-                pass
-            del self.llm, self.chat_handler
-            gc.collect()
-            mm.soft_empty_cache()
+            self.clean()
             
-        text = output['choices'][0]['message']['content']
-        
-        if text.startswith(": "):
-            text = text[2:]
-        text = text.lstrip() 
-        
         return (text,)
 
 class llama_cpp_parameters:
