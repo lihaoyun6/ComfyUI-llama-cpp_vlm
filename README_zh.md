@@ -1,5 +1,5 @@
 # ComfyUI-llama-cpp
-在ComfyUI中基于llama.cpp原生运行LLM/vLLM模型。  
+在ComfyUI中基于llama.cpp原生运行LLM/VLM模型。  
 **[[📃English](./README.md)]**
 
 ## 更新日志
@@ -18,12 +18,12 @@ git clone https://github.com/lihaoyun6/ComfyUI-llama-cpp.git
 python -m pip install -r ComfyUI-llama-cpp/requirements.txt
 ```
 #### 安装llama.cpp 
-- 请从`https://github.com/JamePeng/llama-cpp-python/releases`安装llama-cpp-python的预编译whl, 或根据设备架构自行编译安装.  
+- 请从 [https://github.com/JamePeng/llama-cpp-python/releases](https://github.com/JamePeng/llama-cpp-python/releases) 安装llama-cpp-python的预编译whl, 或根据设备架构自行编译安装.  
 
 #### 模型下载:
 - 请将模型文件下载至`ComfyUI/models/LLM`目录中.  
 
-> 在使用vLLM模型处理图像之前, 请确保已经下载并选择了对应的`mmproj`权重.
+> 在使用VLM模型处理图像之前, 请确保已经下载并选择了对应的`mmproj`权重.
 
 ## 致谢
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  
