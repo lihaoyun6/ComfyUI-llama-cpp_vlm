@@ -308,7 +308,7 @@ class llama_cpp_instruct_adv:
                 user_content.append(image_content)
                 messages.append({"role": "user", "content": user_content})
                 for i, image in enumerate(frames):
-                    print(f"[llama-cpp_vllm] Reading image {i}/{len(frames)}...")
+                    print(f"[llama-cpp_vllm] Reading image {i+1}/{len(frames)}...")
                     data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
                     for item in user_content:
                         if item.get("type") == "image_url":
