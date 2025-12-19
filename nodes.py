@@ -21,6 +21,32 @@ from llama_cpp.llama_chat_format import (
     Qwen25VLChatHandler, Qwen3VLChatHandler
 )
 
+class AnyType(str):
+    def __ne__(self, __value: object) -> bool:
+        return False
+
+class LLM_STORAGE:
+    llm = None
+    chat_handler = None
+    current_config = None
+    
+    def clean(self):
+        self.llm.close()
+        try:
+            self.chat_handler._exit_stack.close()
+        except Exception:
+            pass
+        
+        self.llm = None
+        self.chat_handler = None
+        self.current_config = None
+        
+        gc.collect()
+        mm.soft_empty_cache()
+
+any_type = AnyType("*")
+model_holder = LLM_STORAGE()
+
 llm_extensions = ['.ckpt', '.pt', '.bin', '.pth', '.safetensors', '.gguf']
 folder_paths.folder_names_and_paths["LLM"] = ([os.path.join(folder_paths.models_dir, "LLM")], llm_extensions)
 preset_prompts = {
@@ -248,108 +274,105 @@ class llama_cpp_instruct_adv:
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vllm"
     
-    def clean(self):
-        self.llm.close()
-        try:
-            self.chat_handler._exit_stack.close()
-        except Exception:
-            pass
-        del self.llm, self.chat_handler
-        gc.collect()
-        mm.soft_empty_cache()
-    
     def process(self, llamamodel, parameters, preset_prompt, custom_prompt, system_prompt, input_mode, max_frames, video_size, seed, images=None):
-        mm.soft_empty_cache()
-        keep_model_loaded = llamamodel.get('keep_model_loaded', True)
-        llamamodel['image_min_tokens'] = parameters.get('image_min_tokens', 0) 
-        llamamodel['image_max_tokens'] = parameters.get('image_max_tokens', 0) 
-        filtered_params = {k: v for k, v in parameters.items() if k not in {'image_min_tokens', 'image_max_tokens'}}
-        video_input = input_mode == "video"
-
-        if not hasattr(self, "llm") or self.current_config != llamamodel:
-            print("[llama-cpp_vllm] Reloading model...")
-            if hasattr(self, "llm"):
-                self.llm.close()
-                try:
-                    self.chat_handler._exit_stack.close()
-                except Exception:
-                    pass
-            self.current_config = llamamodel.copy()
-            self.chat_handler, self.llm = get_model(llamamodel)
+        try:
+            mm.soft_empty_cache()
+            keep_model_loaded = llamamodel.get('keep_model_loaded', True)
+            llamamodel['image_min_tokens'] = parameters.get('image_min_tokens', 0) 
+            llamamodel['image_max_tokens'] = parameters.get('image_max_tokens', 0) 
+            filtered_params = {k: v for k, v in parameters.items() if k not in {'image_min_tokens', 'image_max_tokens'}}
+            video_input = input_mode == "video"
             
-        messages = []
-        
-        system_prompts = "请将输入的图片序列当做视频而不是静态帧序列, " + system_prompt if video_input else system_prompt
-        if system_prompts.strip():
-            messages.append({"role": "system", "content": system_prompts})
+            if not model_holder.llm or model_holder.current_config != llamamodel:
+                print("[llama-cpp_vllm] Reloading model...")
+                if model_holder.llm:
+                    model_holder.llm.close()
+                    try:
+                        model_holder.chat_handler._exit_stack.close()
+                    except Exception:
+                        pass
+                model_holder.current_config = llamamodel.copy()
+                model_holder.chat_handler, model_holder.llm = get_model(llamamodel)
+            mm.throw_exception_if_processing_interrupted()
             
-        user_content = []
-        if custom_prompt.strip() and "*" not in preset_prompt:
-            user_content.append({"type": "text", "text": custom_prompt})
-        else:
-            p = preset_prompts[preset_prompt].replace("#", custom_prompt.strip()).replace("@", "video" if video_input else "image")
-            user_content.append({"type": "text", "text": p})
+            messages = []
             
-        if images is not None:
-            if not hasattr(self.chat_handler, "clip_model_path") or self.chat_handler.clip_model_path is None:
-                 raise ValueError("Image input detected, but the loaded model is not configured with a vision module (mmproj).")
-            
-            frames = images
-            if video_input:
-                indices = np.linspace(0, len(images) - 1, max_frames, dtype=int)
-                frames = [images[i] for i in indices]
-            
-            if input_mode == "one by one":
-                texts = []
-                image_content = {
-                    "type": "image_url",
-                    "image_url": {"url": ""}
-                }
-                user_content.append(image_content)
-                messages.append({"role": "user", "content": user_content})
-                for i, image in enumerate(frames):
-                    print(f"[llama-cpp_vllm] Reading image {i+1}/{len(frames)}...")
-                    data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
-                    for item in user_content:
-                        if item.get("type") == "image_url":
-                            item["image_url"]["url"] = f"data:image/jpeg;base64,{data}"
-                            break
-                    output = self.llm.create_chat_completion(messages=messages, seed=seed, **filtered_params)
-                    text = output['choices'][0]['message']['content']
-                    text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
-                    texts.append(text)
-                    
-                if not keep_model_loaded:
-                    self.clean()
-                return (texts,)
+            system_prompts = "请将输入的图片序列当做视频而不是静态帧序列, " + system_prompt if video_input else system_prompt
+            if system_prompts.strip():
+                messages.append({"role": "system", "content": system_prompts})
+                
+            user_content = []
+            if custom_prompt.strip() and "*" not in preset_prompt:
+                user_content.append({"type": "text", "text": custom_prompt})
             else:
-                for image in frames:
-                    if video_input:
-                        data = image2base64(scale_image(image, video_size))
-                    else:
-                        data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
+                p = preset_prompts[preset_prompt].replace("#", custom_prompt.strip()).replace("@", "video" if video_input else "image")
+                user_content.append({"type": "text", "text": p})
+                
+            if images is not None:
+                if not hasattr(model_holder.chat_handler, "clip_model_path") or model_holder.chat_handler.clip_model_path is None:
+                     raise ValueError("Image input detected, but the loaded model is not configured with a vision module (mmproj).")
+                    
+                frames = images
+                if video_input:
+                    indices = np.linspace(0, len(images) - 1, max_frames, dtype=int)
+                    frames = [images[i] for i in indices]
+                    
+                if input_mode == "one by one":
+                    texts = []
                     image_content = {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{data}"}
+                        "image_url": {"url": ""}
                     }
                     user_content.append(image_content)
-                    
+                    messages.append({"role": "user", "content": user_content})
+                    for i, image in enumerate(frames):
+                        mm.throw_exception_if_processing_interrupted()
+                        print(f"[llama-cpp_vllm] Reading image {i+1}/{len(frames)}...")
+                        data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
+                        for item in user_content:
+                            if item.get("type") == "image_url":
+                                item["image_url"]["url"] = f"data:image/jpeg;base64,{data}"
+                                break
+                        output = model_holder.llm.create_chat_completion(messages=messages, seed=seed, **filtered_params)
+                        text = output['choices'][0]['message']['content']
+                        text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
+                        texts.append(text)
+                        
+                    if not keep_model_loaded:
+                        model_holder.clean()
+                    return (texts,)
+                else:
+                    for image in frames:
+                        mm.throw_exception_if_processing_interrupted()
+                        if video_input:
+                            data = image2base64(scale_image(image, video_size))
+                        else:
+                            data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
+                        image_content = {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{data}"}
+                        }
+                        user_content.append(image_content)
+                        
+                    messages.append({"role": "user", "content": user_content})
+                    output = model_holder.llm.create_chat_completion(messages=messages, seed=seed, **filtered_params)
+                    text = output['choices'][0]['message']['content']
+                    text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
+            else:
+                parameters.pop("image_min_tokens", None)
+                parameters.pop("image_max_tokens", None)
                 messages.append({"role": "user", "content": user_content})
-                output = self.llm.create_chat_completion(messages=messages, seed=seed, **filtered_params)
+                output = model_holder.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
                 text = output['choices'][0]['message']['content']
                 text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
-        else:
-            parameters.pop("image_min_tokens", None)
-            parameters.pop("image_max_tokens", None)
-            messages.append({"role": "user", "content": user_content})
-            output = self.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
-            text = output['choices'][0]['message']['content']
-            text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
-        
-        if not keep_model_loaded:
-            self.clean()
-        
-        return (text,)
+                mm.throw_exception_if_processing_interrupted()
+            if not keep_model_loaded:
+                model_holder.clean()
+                
+            return (text,)
+        except:
+            model_holder.clean()
+            raise mm.InterruptProcessingException()
 
 class llama_cpp_instruct:
     @classmethod
@@ -363,52 +386,48 @@ class llama_cpp_instruct:
             },
         }
     
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("output",)
+    RETURN_TYPES = ("STRING", )
+    RETURN_NAMES = ("output", )
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vllm"
     
-    def clean(self):
-        self.llm.close()
-        try:
-            self.chat_handler._exit_stack.close()
-        except Exception:
-            pass
-        del self.llm, self.chat_handler
-        gc.collect()
-        mm.soft_empty_cache()
-    
     def process(self, llamamodel, parameters, prompt, seed):
-        mm.soft_empty_cache()
-        keep_model_loaded = llamamodel.get('keep_model_loaded', True)
-        llamamodel['image_min_tokens'] = parameters.get('image_min_tokens', 0) 
-        llamamodel['image_max_tokens'] = parameters.get('image_max_tokens', 0) 
-        filtered_params = {k: v for k, v in parameters.items() if k not in {'image_min_tokens', 'image_max_tokens'}}
-        
-        if not hasattr(self, "llm") or self.current_config != llamamodel:
-            print("[llama-cpp_vllm] Reloading model...")
-            if hasattr(self, "llm"):
-                self.llm.close()
-                try:
-                    self.chat_handler._exit_stack.close()
-                except Exception:
-                    pass
-            self.current_config = llamamodel.copy()
-            self.chat_handler, self.llm = get_model(llamamodel)
+        try:
+            mm.soft_empty_cache()
+            keep_model_loaded = llamamodel.get('keep_model_loaded', True)
+            llamamodel['image_min_tokens'] = parameters.get('image_min_tokens', 0) 
+            llamamodel['image_max_tokens'] = parameters.get('image_max_tokens', 0) 
+            filtered_params = {k: v for k, v in parameters.items() if k not in {'image_min_tokens', 'image_max_tokens'}}
             
-        messages = []
-        user_content = []
-        user_content.append({"type": "text", "text": prompt})
-        messages.append({"role": "user", "content": user_content})
-        
-        output = self.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
-        text = output['choices'][0]['message']['content']
-        text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
-        
-        if not keep_model_loaded:
-            self.clean()
+            if not model_holder.llm or model_holder.current_config != llamamodel:
+                print("[llama-cpp_vllm] Reloading model...")
+                if model_holder.llm:
+                    model_holder.llm.close()
+                    try:
+                        model_holder.chat_handler._exit_stack.close()
+                    except Exception:
+                        pass
+                model_holder.current_config = llamamodel.copy()
+                model_holder.chat_handler, model_holder.llm = get_model(llamamodel)
+            mm.throw_exception_if_processing_interrupted()
             
-        return (text,)
+            messages = []
+            user_content = []
+            user_content.append({"type": "text", "text": prompt})
+            messages.append({"role": "user", "content": user_content})
+            
+            output = model_holder.llm.create_chat_completion(messages=messages, seed=seed, **parameters)
+            text = output['choices'][0]['message']['content']
+            text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
+            mm.throw_exception_if_processing_interrupted()
+            
+            if not keep_model_loaded:
+                model_holder.clean()
+            
+            return (text,)
+        except:
+            model_holder.clean()
+            raise mm.InterruptProcessingException()
 
 class llama_cpp_parameters:
     @classmethod
@@ -437,6 +456,20 @@ class llama_cpp_parameters:
     CATEGORY = "llama-cpp-vllm"
     def process(self, **kwargs):
         return (kwargs,)
+    
+class llama_cpp_unload_model:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {"any": (any_type,)}}
+    
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("any",)
+    FUNCTION = "process"
+    CATEGORY = "llama-cpp-vllm"
+    
+    def process(self, any):
+        model_holder.clean()
+        return (any,)
 
 class json_to_bbox:
     @classmethod
@@ -686,6 +719,7 @@ NODE_CLASS_MAPPINGS = {
     "llama_cpp_instruct_adv": llama_cpp_instruct_adv,
     "llama_cpp_instruct": llama_cpp_instruct,
     "llama_cpp_parameters": llama_cpp_parameters,
+    "llama_cpp_unload_model": llama_cpp_unload_model,
     "json_to_bbox": json_to_bbox,
     "bbox_to_segs": bbox_to_segs,
     "bbox_to_mask": bbox_to_mask,
@@ -697,6 +731,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "llama_cpp_instruct_adv": "Llama-cpp Instruct (Advanced)",
     "llama_cpp_instruct": "Llama-cpp Instruct",
     "llama_cpp_parameters": "Llama-cpp Parameters",
+    "llama_cpp_unload_model": "Llama-cpp Unload Model",
     "json_to_bbox": "JSON to BBoxes",
     "bbox_to_segs": "BBoxes to SEGS",
     "bbox_to_mask": "BBoxes to MASK",
