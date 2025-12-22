@@ -250,11 +250,11 @@ class llama_cpp_model_loader:
     def INPUT_TYPES(s):
         all_llms = folder_paths.get_filename_list("LLM")
         model_list = [f for f in all_llms if "mmproj" not in f.lower()]
-        mmproj_list = [f for f in all_llms if "mmproj" in f.lower()]
+        mmproj_list = ["None"]+[f for f in all_llms if "mmproj" in f.lower()]
             
         return {"required": {
             "model": (model_list,),
-            "mmproj_model": (["None"]+mmproj_list, {"default": "None"}),
+            "mmproj_model": (mmproj_list, {"default": "None"}),
             "chat_handler": (chat_handlers, {"default": "None"}),
             "n_ctx": ("INT", {
                 "default": 8192,
@@ -318,20 +318,23 @@ class llama_cpp_instruct_adv:
                 "preset_prompt": (preset_tags, {"default": preset_tags[0]}),
                 "custom_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": 'user_prompt\n\nFor preset hints marked with an "*", this will be used to fill the placeholder (e.g., Object names in BBox detection)\nOtherwise, this will override the preset prompts.'}),
                 "system_prompt": ("STRING", {"multiline": True, "default": ""}),
-                "input_mode": (["one by one", "images", "video"], {
+                "inference_mode": (["one by one", "images", "video"], {
                     "default": "one by one",
-                    "tooltip": "one by one: Read one image at a time\nimages: \tRead all images at once\nvideo: \tTreat the input images as video"
+                    "tooltip": "one by one: Read one image at a time\nimages:  \tRead all images at once\nvideo:  \tTreat the input images as video"
                 }),
                 "max_frames": ("INT", {
                     "default": 24,
                     "min": 2,
                     "max": 1024,
                     "step": 1,
-                    "tooltip": "Number of frames to sample evenly from the video."
+                    "tooltip": 'Number of frames to sample evenly from input video.\n(for "video" mode only)'
                 }),
-                "video_size": ([128, 256, 512, 768, 1024], {
+                "downscale": ("INT", {
                     "default": 256,
-                    "tooltip": "Automatically scale down the video size."
+                    "min": 128,
+                    "max": 16384,
+                    "step": 64,
+                    "tooltip": 'Auto-downscale input images in "images" and "video" modes.'
                 }),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "step": 1}),
                 "force_offload": ("BOOLEAN", {
@@ -350,11 +353,11 @@ class llama_cpp_instruct_adv:
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vlm"
     
-    def process(self, llama_model, parameters, preset_prompt, custom_prompt, system_prompt, input_mode, max_frames, video_size, seed, force_offload, images=None, queue_handler=None):
+    def process(self, llama_model, parameters, preset_prompt, custom_prompt, system_prompt, inference_mode, max_frames, downscale, seed, force_offload, images=None, queue_handler=None):
         if not llama_model.llm:
             raise RuntimeError("The model has been unloaded or failed to load!")
         
-        video_input = input_mode == "video"
+        video_input = inference_mode == "video"
         messages = []
         system_prompts = "请将输入的图片序列当做视频而不是静态帧序列, " + system_prompt if video_input else system_prompt
         if system_prompts.strip():
@@ -376,7 +379,7 @@ class llama_cpp_instruct_adv:
                 indices = np.linspace(0, len(images) - 1, max_frames, dtype=int)
                 frames = [images[i] for i in indices]
                 
-            if input_mode == "one by one":
+            if inference_mode == "one by one":
                 text = []
                 image_content = {
                     "type": "image_url",
@@ -399,8 +402,8 @@ class llama_cpp_instruct_adv:
                     text.append(_text)
             else:
                 for image in frames:
-                    if video_input:
-                        data = image2base64(scale_image(image, video_size))
+                    if len(frames) > 1:
+                        data = image2base64(scale_image(image, downscale))
                     else:
                         data = image2base64(np.clip(255.0 * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
                     image_content = {
