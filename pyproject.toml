@@ -1,6 +1,6 @@
 [project]
 name = "llama-cpp_vllm"
-description = ""
+description = "Run LLM/VLM models natively in ComfyUI based on llama.cpp"
 version = "1.1.0"
 license = {file = "LICENSE"} 
 # classifiers = [
