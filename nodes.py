@@ -725,13 +725,72 @@ class bboxes_to_bbox:
         if bbox_index != 999:
             return ([bboxes[image_index][bbox_index]],)
         return (bboxes[image_index],)
-        
 
+# from: https://github.com/crystian/ComfyUI-Crystools
+class parse_json_node:
+        @classmethod
+        def INPUT_TYPES(s):
+                return {
+                        "required": {
+                            "input": ("STRING", {"forceInput": True}),
+                        },
+                        "optional": {
+                            "key": ("STRING",),
+                            "default": ("STRING",),
+                        },
+                }
+    
+        RETURN_TYPES = (any_type, "STRING", "INT", "FLOAT", "BOOLEAN")
+        RETURN_NAMES = ("any", "string", "int", "float", "boolean")
+        FUNCTION = "process"
+        CATEGORY = "llama-cpp-vlm"
+    
+        def process(self, input, key=None, default=None):
+                result = {}
+                val = ""
+                if key is not None and key != "":
+                    val = get_nested_value(input.strip().removeprefix("```json").removesuffix("```"), key, default)
+            
+                result["any"] = val
+                try:
+                    result["string"] = str(val)
+                except Exception as e:
+                    result["string"] = val
+                    
+                try:
+                    result["int"] = int(val)
+                except Exception as e:
+                    result["int"] = val
+                    
+                try:
+                    result["float"] = float(val)
+                except Exception as e:
+                    result["float"] = val
+                    
+                try:
+                    result["boolean"] = val.lower() == "true"
+                except Exception as e:
+                    result["boolean"] = val
+                    
+                return (result["any"], result["string"], result["int"], result["float"], result["boolean"])
+
+def get_nested_value(data, dotted_key, default=None):
+    keys = dotted_key.split('.')
+    for key in keys:
+        if isinstance(data, str):
+                data = json.loads(data)
+        if isinstance(data, dict) and key in data:
+            data = data[key]
+        else:
+            return default
+    return data
+        
 NODE_CLASS_MAPPINGS = {
     "llama_cpp_model_loader": llama_cpp_model_loader,
     "llama_cpp_instruct_adv": llama_cpp_instruct_adv,
     "llama_cpp_parameters": llama_cpp_parameters,
     "llama_cpp_unload_model": llama_cpp_unload_model,
+    "parse_json_node": parse_json_node,
     "json_to_bbox": json_to_bbox,
     "bbox_to_segs": bbox_to_segs,
     "bbox_to_mask": bbox_to_mask,
@@ -743,6 +802,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "llama_cpp_instruct_adv": "Llama-cpp Instruct",
     "llama_cpp_parameters": "Llama-cpp Parameters",
     "llama_cpp_unload_model": "Llama-cpp Unload Model",
+    "parse_json_node": "Parse JSON",
     "json_to_bbox": "JSON to BBoxes",
     "bbox_to_segs": "BBoxes to SEGS",
     "bbox_to_mask": "BBoxes to MASK",
