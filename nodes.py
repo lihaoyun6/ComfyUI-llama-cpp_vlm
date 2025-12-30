@@ -748,51 +748,62 @@ class bboxes_to_bbox:
 
 # from: https://github.com/crystian/ComfyUI-Crystools
 class parse_json_node:
-        @classmethod
-        def INPUT_TYPES(s):
-                return {
-                        "required": {
-                            "input": ("STRING", {"forceInput": True}),
-                        },
-                        "optional": {
-                            "key": ("STRING",),
-                            "default": ("STRING",),
-                        },
-                }
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "input": ("STRING", {"forceInput": True}),
+            },
+            "optional": {
+                "key": ("STRING",),
+                "default": ("STRING",),
+            },
+        }
     
-        RETURN_TYPES = (any_type, "STRING", "INT", "FLOAT", "BOOLEAN")
-        RETURN_NAMES = ("any", "string", "int", "float", "boolean")
-        FUNCTION = "process"
-        CATEGORY = "llama-cpp-vlm"
+    RETURN_TYPES = (any_type, "STRING", "INT", "FLOAT", "BOOLEAN")
+    RETURN_NAMES = ("any", "string", "int", "float", "boolean")
+    FUNCTION = "process"
+    CATEGORY = "llama-cpp-vlm"
     
-        def process(self, input, key=None, default=None):
-                result = {}
-                val = ""
-                if key is not None and key != "":
-                    val = get_nested_value(input.strip().removeprefix("```json").removesuffix("```"), key, default)
+    def process(self, input, key=None, default=None):
+        if isinstance(input, str):
+            input = [input]
             
-                result["any"] = val
-                try:
-                    result["string"] = str(val)
-                except Exception as e:
-                    result["string"] = val
-                    
-                try:
-                    result["int"] = int(val)
-                except Exception as e:
-                    result["int"] = val
-                    
-                try:
-                    result["float"] = float(val)
-                except Exception as e:
-                    result["float"] = val
-                    
-                try:
-                    result["boolean"] = val.lower() == "true"
-                except Exception as e:
-                    result["boolean"] = val
-                    
-                return (result["any"], result["string"], result["int"], result["float"], result["boolean"])
+        result = {}
+        for i, json in enumerate(input):
+            val = ""
+            if key is not None and key != "":
+                val = get_nested_value(input.strip().removeprefix("```json").removesuffix("```"), key, default)
+            
+            result["any"][i] = val
+            try:
+                result["string"][i] = str(val)
+            except Exception as e:
+                result["string"][i] = val
+            
+            try:
+                result["int"][i] = int(val)
+            except Exception as e:
+                result["int"][i] = val
+            
+            try:
+                result["float"][i] = float(val)
+            except Exception as e:
+                result["float"][i] = val
+            
+            try:
+                result["boolean"][i] = val.lower() == "true"
+            except Exception as e:
+                result["boolean"][i] = val
+                
+        if len(result["any"]) == 1:
+            result["any"] = result["any"][0]
+            result["string"] = result["string"][0]
+            result["int"] = result["int"][0]
+            result["float"] = result["float"][0]
+            result["boolean"] = result["boolean"][0]
+        
+        return (result["any"], result["string"], result["int"], result["float"], result["boolean"])
 
 def get_nested_value(data, dotted_key, default=None):
     keys = dotted_key.split('.')
@@ -804,6 +815,34 @@ def get_nested_value(data, dotted_key, default=None):
         else:
             return default
     return data
+
+class remove_code_block:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "input": ("STRING", {"forceInput": True}),
+            },
+            "optional": {
+                "label": ("STRING",),
+            },
+        }
+    
+    RETURN_TYPES = ("STRING")
+    RETURN_NAMES = ("output")
+    FUNCTION = "process"
+    CATEGORY = "llama-cpp-vlm"
+    
+    def process(self, input, label):
+        if isinstance(input, str):
+            input = [input]
+        
+        output = []
+        for value in input:
+            output.append(value.strip().removeprefix(f"```{label}").removesuffix("```"))
+        if len(output) == 1:
+            return (output[0],)
+        return (output,)
         
 NODE_CLASS_MAPPINGS = {
     "llama_cpp_model_loader": llama_cpp_model_loader,
@@ -815,6 +854,7 @@ NODE_CLASS_MAPPINGS = {
     "bbox_to_segs": bbox_to_segs,
     "bbox_to_mask": bbox_to_mask,
     "bboxes_to_bbox": bboxes_to_bbox,
+    "remove_code_block": remove_code_block,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -827,4 +867,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "bbox_to_segs": "BBoxes to SEGS",
     "bbox_to_mask": "BBoxes to MASK",
     "bboxes_to_bbox": "BBoxes to BBox",
+    "remove_code_block": "Unpack Code Block",
 }
