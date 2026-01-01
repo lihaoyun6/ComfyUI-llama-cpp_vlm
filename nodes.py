@@ -391,8 +391,9 @@ class llama_cpp_instruct_adv:
             
         }
     
-    RETURN_TYPES = ("STRING", "INT")
-    RETURN_NAMES = ("output", "state_uid")
+    RETURN_TYPES = ("STRING", "STRING", "INT")
+    RETURN_NAMES = ("output", "output", "state_uid")
+    OUTPUT_IS_LIST = (False, True, False)
     FUNCTION = "process"
     CATEGORY = "llama-cpp-vlm"
     
@@ -450,7 +451,8 @@ class llama_cpp_instruct_adv:
                     messages = []
             else:
                 messages = []
-            
+        out1 = ""
+        out2 = []
         user_content = []
         if custom_prompt.strip() and "*" not in preset_prompt:
             user_content.append({"type": "text", "text": custom_prompt})
@@ -468,7 +470,7 @@ class llama_cpp_instruct_adv:
                 frames = [images[i] for i in indices]
                 
             if inference_mode == "one by one":
-                text = []
+                tmp_list = []
                 image_content = {
                     "type": "image_url",
                     "image_url": {"url": ""}
@@ -486,9 +488,11 @@ class llama_cpp_instruct_adv:
                             item["image_url"]["url"] = f"data:image/jpeg;base64,{data}"
                             break
                     output = llama_model.llm.create_chat_completion(messages=messages, seed=seed, **_parameters)
-                    _text = output['choices'][0]['message']['content']
-                    _text = _text[2:].lstrip() if _text.startswith(": ") else _text.lstrip() 
-                    text.append(_text)
+                    text = output['choices'][0]['message']['content'].removeprefix(": ").lstrip()
+                    tmp_list.append(f"====== Image {i+1} ======")
+                    tmp_list.append(text)
+                    out2.append(text)
+                out1 = "\n\n".join(tmp_list)
             else:
                 for image in frames:
                     if len(frames) > 1:
@@ -503,14 +507,14 @@ class llama_cpp_instruct_adv:
                     
                 messages.append({"role": "user", "content": user_content})
                 output = llama_model.llm.create_chat_completion(messages=messages, seed=seed, **_parameters)
-                text = output['choices'][0]['message']['content']
-                text = text[2:].lstrip() if text.startswith(": ") else text.lstrip() 
+                out1 = output['choices'][0]['message']['content'].removeprefix(": ").lstrip()
+                out2 = [out1]
         else:
             messages.append({"role": "user", "content": user_content})
             output = llama_model.llm.create_chat_completion(messages=messages, seed=seed, **_parameters)
-            text = output['choices'][0]['message']['content']
-            text = text[2:].lstrip() if text.startswith(": ") else text.lstrip()
-        
+            out1 = output['choices'][0]['message']['content'].removeprefix(": ").lstrip()
+            out2 = [out1]
+            
         if save_states:
             print(f"[llama-cpp_vlm] Saving state id={uid}...")
             llama_model.states[f"{uid}"] = llama_model.llm.save_state()
@@ -523,7 +527,7 @@ class llama_cpp_instruct_adv:
             
         del messages
         gc.collect()
-        return (text,uid)
+        return (out1, out2, uid)
 
 class llama_cpp_parameters:
     @classmethod
