@@ -528,7 +528,7 @@ class llama_cpp_instruct_adv:
         if save_states:
             print(f"[llama-cpp_vlm] Saving state id={uid}...")
             llama_model.states[f"{uid}"] = llama_model.llm.save_state()
-            messages.append({"role": "assistant", "content": text})
+            messages.append({"role": "assistant", "content": out1})
             clear_message = self.sanitize_messages(messages)
             llama_model.messages[f"{uid}"] = clear_message
             
