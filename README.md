@@ -23,3 +23,4 @@ python -m pip install -r ComfyUI-llama-cpp/requirements.txt
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  
 - [ComfyUI-llama-cpp](https://github.com/kijai/ComfyUI-llama-cpp) @kijai  
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) @comfyanonymous
+- [ComfyUI-llama-cpp_vlm](https://github.com/lihaoyun6/ComfyUI-llama-cpp_vlm)@lihaoyun6
