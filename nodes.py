@@ -220,7 +220,9 @@ class LLAMA_CPP_STORAGE:
         image_min_tokens = config["image_min_tokens"]
         n_gpu_layers = -1
         
-        model_path = os.path.join(folder_paths.models_dir, 'LLM', model)
+        model_path = folder_paths.get_full_path("LLM", model)
+        if model_path is None:
+            raise FileNotFoundError(f"Model '{model}' not found in any LLM folder")
         handler = get_chat_handler(chat_handler)
         
         if vram_limit != -1:
@@ -229,7 +231,9 @@ class LLAMA_CPP_STORAGE:
             gguf_layer_size = gguf_size / gguf_layers
         
         if mmproj and mmproj != "None":
-            mmproj_path = os.path.join(folder_paths.models_dir, 'LLM', mmproj)
+            mmproj_path = folder_paths.get_full_path("LLM", mmproj)
+            if mmproj_path is None:
+                raise FileNotFoundError(f"mmproj '{mmproj}' not found in any LLM folder")
             if chat_handler == "None":
                 raise ValueError('"chat_handler" cannot be None!')
             
@@ -281,7 +285,11 @@ if not hasattr(mm, "unload_all_models_backup"):
     print("[llama-cpp_vlm] Model cleanup hook applied!")
 
 llm_extensions = ['.ckpt', '.pt', '.bin', '.pth', '.safetensors', '.gguf']
-folder_paths.folder_names_and_paths["LLM"] = ([os.path.join(folder_paths.models_dir, "LLM")], llm_extensions)
+# Register the default LLM folder without discarding paths already added
+# via extra_model_paths.yaml, then merge in the supported extensions.
+folder_paths.add_model_folder_path("LLM", os.path.join(folder_paths.models_dir, "LLM"))
+_llm_paths, _llm_exts = folder_paths.folder_names_and_paths["LLM"]
+folder_paths.folder_names_and_paths["LLM"] = (_llm_paths, set(_llm_exts) | set(llm_extensions))
 preset_prompts = {
     "Empty - Nothing": "",
     "Normal - Describe": "Describe this @.",
