@@ -19,6 +19,12 @@ python -m pip install -r ComfyUI-llama-cpp/requirements.txt
 
 	> If you need a VLM model to process image input, don't forget to download the `mmproj` weights.
 
+### Windows OpenMP safety
+
+Some Windows `llama-cpp-python` wheels conflict with PyTorch's OpenMP runtime
+and can abort ComfyUI during image decode. `KMP_DUPLICATE_LIB_OK` is not a
+permanent fix. See the [OpenMP-safe CUDA build guide](docs/windows-openmp.md).
+
 ## Credits  
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  
 - [ComfyUI-llama-cpp](https://github.com/kijai/ComfyUI-llama-cpp) @kijai  
