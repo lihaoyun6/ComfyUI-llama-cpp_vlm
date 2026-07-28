@@ -43,6 +43,54 @@ Fatal Python error: Aborted
 - 安装后应在不设置 `KMP_DUPLICATE_LIB_OK` 的条件下测试普通生图工作流、
   GGUF/mmproj 图片推理以及多次连续执行。
 
+## English: Windows OpenMP fix
+
+This branch fixes an OpenMP runtime conflict that can occur when ComfyUI,
+PyTorch, and `llama-cpp-python` run in the same Windows process. A typical
+failure looks like this:
+
+```text
+OMP: Error #15: Initializing libomp140.x86_64.dll,
+but found libiomp5md.dll already initialized.
+Fatal Python error: Aborted
+```
+
+### What changed
+
+- Added a reproducible Windows CUDA wheel build that disables GGML OpenMP with
+  `-DGGML_OPENMP=OFF`.
+- Fixed the JamePeng fork packaging logic so that
+  `libomp140.x86_64.dll` is not included when OpenMP is disabled.
+- Added post-build wheel validation. Validation fails if the wheel still
+  bundles or imports `libomp`, `libiomp`, or `vcomp`.
+- Added an early startup check for PyTorch's `libiomp5md.dll` and llama.cpp's
+  `libomp140.x86_64.dll`, with an explicit warning when both are installed.
+- Added compatibility for both the new `mmproj_path` property and the legacy
+  `clip_model_path` property, preventing a successfully loaded mmproj from
+  being reported as missing.
+
+### Important notes
+
+> **The Windows wheels currently referenced by `requirements.txt` are still
+> the original `llama-cpp-python 0.3.40` builds and do not include this OpenMP
+> fix.** Until an OpenMP-safe wheel is published in GitHub Releases and the
+> download URL is updated, build and install one by following the
+> [Windows OpenMP-safe build guide](docs/windows-openmp.md).
+
+- Do not use `KMP_DUPLICATE_LIB_OK=TRUE` as a permanent solution. Remove it
+  from ComfyUI startup scripts and Windows environment variables.
+- The wheel must match ComfyUI's Python minor version. For example, Python
+  3.13 requires a `cp313` wheel.
+- `-DCMAKE_CUDA_ARCHITECTURES=120` targets RTX 5090/Blackwell. Rebuild with the
+  appropriate Compute Capability for other GPUs.
+- Completely close ComfyUI before installing the wheel, and run pip through
+  Portable's own `python_embeded\python.exe`.
+- ComfyUI Manager dependency updates may replace the safe wheel with the
+  original build. After an update, check whether
+  `llama_cpp\lib\libomp140.x86_64.dll` has returned.
+- Validate without `KMP_DUPLICATE_LIB_OK`: test a normal image-generation
+  workflow, GGUF/mmproj image inference, and several repeated executions.
+
 ---
 
 # ComfyUI-llama-cpp  
