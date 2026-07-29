@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$PythonExe,
-    [string]$CudaArchitectures = "120",
+    [string]$CudaArchitectures = "75;80;86;89;120",
     [string]$SourceCommit = "bab30611b4035bd69765d4856f907c763a6a69fb"
 )
 
@@ -22,8 +22,12 @@ if (-not (Test-Path -LiteralPath $source)) {
 git -C $source -c core.longpaths=true checkout $SourceCommit
 git -C $source -c core.longpaths=true submodule update --init --recursive
 
+$savedErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 git -C $source apply --reverse --check $patch 2>$null
-if ($LASTEXITCODE -ne 0) {
+$patchAlreadyApplied = $LASTEXITCODE -eq 0
+$ErrorActionPreference = $savedErrorActionPreference
+if (-not $patchAlreadyApplied) {
     git -C $source apply --check $patch
     git -C $source apply $patch
 }
@@ -47,16 +51,15 @@ cmd.exe /d /s /c "`"$vcvars`" && set" | ForEach-Object {
 & $python -m pip install --upgrade ninja scikit-build-core
 $env:CMAKE_GENERATOR = "Ninja"
 $env:CUDACXX = Join-Path $env:CUDA_PATH "bin\nvcc.exe"
-$cmakeArgs = @(
-    "-DGGML_CUDA=ON",
-    "-DGGML_OPENMP=OFF",
-    "-DGGML_NATIVE=OFF",
-    "-DCMAKE_CUDA_ARCHITECTURES=$CudaArchitectures"
-) -join ";"
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 & $python -m pip wheel --no-cache-dir --no-deps --no-build-isolation `
-    --wheel-dir $dist --config-settings "cmake.args=$cmakeArgs" $source
+    --wheel-dir $dist `
+    --config-settings "cmake.define.GGML_CUDA=ON" `
+    --config-settings "cmake.define.GGML_OPENMP=OFF" `
+    --config-settings "cmake.define.GGML_NATIVE=OFF" `
+    --config-settings "cmake.define.CMAKE_CUDA_ARCHITECTURES=$CudaArchitectures" `
+    $source
 if ($LASTEXITCODE -ne 0) {
     throw "Wheel build failed."
 }
