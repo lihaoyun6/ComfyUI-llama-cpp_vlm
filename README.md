@@ -100,25 +100,129 @@ Run LLM/VLM models natively in ComfyUI based on llama.cpp
 ## Preview  
 ![](./img/preview.jpg)
 
-## Installation  
+## 安装方法（Windows / RTX 50 系）
 
-#### Install the node:  
-```bash
-cd ComfyUI/custom_nodes
-git clone https://github.com/lihaoyun6/ComfyUI-llama-cpp.git
-python -m pip install -r ComfyUI-llama-cpp/requirements.txt
+以下方法会从本仓库安装节点，并在本机编译不携带 LLVM OpenMP Runtime 的
+`llama-cpp-python` CUDA wheel。请不要在 Windows 上直接执行原来的
+`pip install -r requirements.txt`，其中引用的旧 Windows wheel 尚未包含
+OpenMP 修复。
+
+### 1. 克隆本仓库
+
+```powershell
+$portable = "C:\path\to\ComfyUI_windows_portable"
+$python = Join-Path $portable "python_embeded\python.exe"
+
+Set-Location (Join-Path $portable "ComfyUI\custom_nodes")
+git clone https://github.com/yaocoler/ComfyUI-llama-cpp_vlmx.git
+Set-Location .\ComfyUI-llama-cpp_vlmx
 ```
 
-#### Download models:  
-- Place your model files in the `ComfyUI/models/LLM` folder.  
+### 2. 安装 Python 基础依赖
 
-	> If you need a VLM model to process image input, don't forget to download the `mmproj` weights.
+```powershell
+& $python -m pip install diskcache scipy numpy pillow gguf tqdm
+```
 
-### Windows OpenMP safety
+### 3. 构建 OpenMP-safe CUDA wheel
 
-Some Windows `llama-cpp-python` wheels conflict with PyTorch's OpenMP runtime
-and can abort ComfyUI during image decode. `KMP_DUPLICATE_LIB_OK` is not a
-permanent fix. See the [OpenMP-safe CUDA build guide](docs/windows-openmp.md).
+需要提前安装 Visual Studio 2022 C++ Build Tools、Windows 11 SDK、Git、
+CMake，以及支持目标显卡的 CUDA Toolkit。RTX 5090 / CUDA 12.8 示例：
+
+```powershell
+.\tools\build_windows_openmp_safe.ps1 `
+  -PythonExe $python `
+  -CudaArchitectures 120
+```
+
+脚本会自动应用源码补丁，以 `GGML_OPENMP=OFF` 构建，并拒绝任何仍携带或
+依赖 `libomp`、`libiomp` 或 `vcomp` 的 wheel。
+
+### 4. 安装构建结果
+
+完全关闭 ComfyUI，然后执行：
+
+```powershell
+$wheel = Get-ChildItem .\dist\llama_cpp_python-*.whl |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+& $python -m pip install --force-reinstall --no-deps $wheel.FullName
+```
+
+从 ComfyUI 启动脚本和 Windows 环境变量中移除
+`KMP_DUPLICATE_LIB_OK=TRUE`，再启动 ComfyUI。
+
+### 5. 放置模型
+
+- 将 GGUF 模型和对应的 mmproj 文件放入 `ComfyUI\models\LLM`。
+- 在模型加载节点中同时选择 GGUF、匹配的 mmproj 和正确的 Chat Handler。
+- 在不设置 `KMP_DUPLICATE_LIB_OK` 的情况下连续运行多次图片工作流。
+
+更完整的编译和验收说明参见
+[Windows OpenMP-safe 构建指南](docs/windows-openmp.md)。
+
+## Installation (Windows / RTX 50 series)
+
+This method installs the node from this repository and locally builds a CUDA
+`llama-cpp-python` wheel without the LLVM OpenMP runtime. Do not use the old
+`pip install -r requirements.txt` command on Windows yet: its referenced
+Windows wheels do not contain this OpenMP fix.
+
+### 1. Clone this repository
+
+```powershell
+$portable = "C:\path\to\ComfyUI_windows_portable"
+$python = Join-Path $portable "python_embeded\python.exe"
+
+Set-Location (Join-Path $portable "ComfyUI\custom_nodes")
+git clone https://github.com/yaocoler/ComfyUI-llama-cpp_vlmx.git
+Set-Location .\ComfyUI-llama-cpp_vlmx
+```
+
+### 2. Install the Python dependencies
+
+```powershell
+& $python -m pip install diskcache scipy numpy pillow gguf tqdm
+```
+
+### 3. Build the OpenMP-safe CUDA wheel
+
+Install Visual Studio 2022 C++ Build Tools, the Windows 11 SDK, Git, CMake, and
+a CUDA Toolkit supporting the target GPU first. For RTX 5090 with CUDA 12.8:
+
+```powershell
+.\tools\build_windows_openmp_safe.ps1 `
+  -PythonExe $python `
+  -CudaArchitectures 120
+```
+
+The script applies the source patch, builds with `GGML_OPENMP=OFF`, and rejects
+any wheel that still bundles or imports `libomp`, `libiomp`, or `vcomp`.
+
+### 4. Install the wheel
+
+Completely close ComfyUI, then run:
+
+```powershell
+$wheel = Get-ChildItem .\dist\llama_cpp_python-*.whl |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+& $python -m pip install --force-reinstall --no-deps $wheel.FullName
+```
+
+Remove `KMP_DUPLICATE_LIB_OK=TRUE` from ComfyUI startup scripts and Windows
+environment variables before starting ComfyUI.
+
+### 5. Add models
+
+- Put the GGUF model and matching mmproj file in `ComfyUI\models\LLM`.
+- Select the GGUF, matching mmproj, and correct Chat Handler in the loader.
+- Run the image workflow repeatedly without `KMP_DUPLICATE_LIB_OK`.
+
+See the [Windows OpenMP-safe build guide](docs/windows-openmp.md) for complete
+build and acceptance checks.
 
 ## Credits  
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  
