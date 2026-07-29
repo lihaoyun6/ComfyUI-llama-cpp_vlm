@@ -19,6 +19,25 @@ python -m pip install -r ComfyUI-llama-cpp/requirements.txt
 
 	> 在使用VLM模型进行图像推理之前, 请确保已经下载并选择了主模型对应的`mmproj`权重文件.
 
+## 文生图提示词节点
+
+`Text to Image Prompt` 可以将一个词语或词组扩写为文生图提示词。
+
+```text
+Llama-cpp Model Loader → Text to Image Prompt → CLIP Text Encode
+```
+
+在 `subject` 中输入主体（例如 `雨夜里的白猫`），需要时在
+`setting_words` 中填写风格词。使用纯文本模型时，将 `mmproj` 和
+`chat_handler` 设置为 `None`。
+
+## 更新日志
+
+### 2026-07-29
+
+- 新增 `Text to Image Prompt` 文生图提示词节点。
+- 改进 `mmproj` 兼容性。
+
 ## 致谢
 - [llama-cpp-python](https://github.com/JamePeng/llama-cpp-python) @JamePeng  
 - [ComfyUI-llama-cpp](https://github.com/kijai/ComfyUI-llama-cpp) @kijai
