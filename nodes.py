@@ -543,7 +543,12 @@ class llama_cpp_instruct_adv:
             user_content.append({"type": "text", "text": p})
             
         if images is not None:
-            if not hasattr(LLAMA_CPP_STORAGE.chat_handler, "clip_model_path") or LLAMA_CPP_STORAGE.chat_handler.clip_model_path is None:
+            handler = LLAMA_CPP_STORAGE.chat_handler
+            mmproj_path = (
+                getattr(handler, "mmproj_path", None)
+                or getattr(handler, "clip_model_path", None)
+            )
+            if not mmproj_path:
                  raise ValueError("Image input detected, but the loaded model is not configured with a mmproj module.")
                 
             frames = images
@@ -621,6 +626,90 @@ class llama_cpp_instruct_adv:
         del messages
         gc.collect()
         return (out1, out2, uid)
+
+class llama_cpp_text_to_image_prompt:
+    """Expand a short subject into a prompt suitable for text-to-image models."""
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "llama_model": ("LLAMACPPMODEL",),
+                "subject": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "输入一个词语或词组，例如：雨夜里的白猫",
+                    "tooltip": "要扩写的主体词语或词组。",
+                }),
+                "setting_words": ("STRING", {
+                    "default": "电影感，细节丰富，自然光影",
+                    "multiline": True,
+                    "placeholder": "风格、场景、构图、光线等设定词",
+                    "tooltip": "用于约束画面风格、场景、构图、光线等；可以留空。",
+                }),
+                "language": (["中文", "English"], {"default": "中文"}),
+                "detail_level": (["简洁", "详细", "极致详细"], {"default": "详细"}),
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                    "step": 1,
+                }),
+            },
+            "optional": {
+                "parameters": ("LLAMACPPARAMS",),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("image_prompt",)
+    FUNCTION = "generate"
+    CATEGORY = "llama-cpp-vlm"
+
+    def generate(self, llama_model, subject, setting_words, language, detail_level, seed, parameters=None):
+        subject = subject.strip()
+        if not subject:
+            raise ValueError('"subject" cannot be empty.')
+        if not LLAMA_CPP_STORAGE.llm:
+            LLAMA_CPP_STORAGE.load_model(llama_model)
+
+        length_instructions = {
+            "简洁": "Use one concise sentence.",
+            "详细": "Use one cohesive paragraph with rich, concrete visual details.",
+            "极致详细": "Use one highly detailed paragraph covering subject, environment, composition, lighting, color, texture, mood, and camera perspective.",
+        }
+        output_language = "Chinese" if language == "中文" else "English"
+        system_prompt = (
+            "You are a professional prompt writer for text-to-image generation. "
+            "Turn the user's short subject into a vivid, directly usable image prompt. "
+            "Preserve the subject's meaning and incorporate the supplied setting words naturally. "
+            "Describe only visible image content; do not explain your work, add headings, quotes, "
+            "markdown, negative prompts, or conversational text. "
+            f"Write only the final prompt in {output_language}. "
+            f"{length_instructions[detail_level]}"
+        )
+        settings = setting_words.strip() or "(none)"
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Subject: {subject}\nSetting words: {settings}"},
+        ]
+        generation_parameters = {
+            "max_tokens": 512,
+            "top_k": 30,
+            "top_p": 0.9,
+            "temperature": 0.8,
+            "repeat_penalty": 1.05,
+        }
+        if parameters is not None:
+            generation_parameters.update(parameters)
+            generation_parameters.pop("state_uid", None)
+
+        output = LLAMA_CPP_STORAGE.llm.create_chat_completion(
+            messages=messages, seed=seed, **generation_parameters
+        )
+        prompt = output["choices"][0]["message"]["content"].strip()
+        prompt = prompt.removeprefix("```text").removeprefix("```").removesuffix("```").strip()
+        return (prompt,)
 
 class llama_cpp_parameters:
     @classmethod
@@ -1134,6 +1223,7 @@ class PromptEnhancerPreset:
 NODE_CLASS_MAPPINGS = {
     "llama_cpp_model_loader": llama_cpp_model_loader,
     "llama_cpp_instruct_adv": llama_cpp_instruct_adv,
+    "llama_cpp_text_to_image_prompt": llama_cpp_text_to_image_prompt,
     "llama_cpp_parameters": llama_cpp_parameters,
     "llama_cpp_unload_model": llama_cpp_unload_model,
     "llama_cpp_clean_states": llama_cpp_clean_states,
@@ -1149,6 +1239,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "llama_cpp_model_loader": "Llama-cpp Model Loader",
     "llama_cpp_instruct_adv": "Llama-cpp Instruct",
+    "llama_cpp_text_to_image_prompt": "Text to Image Prompt",
     "llama_cpp_parameters": "Llama-cpp Parameters",
     "llama_cpp_unload_model": "Llama-cpp Unload Model",
     "llama_cpp_clean_states": "Llama-cpp Clean States",
