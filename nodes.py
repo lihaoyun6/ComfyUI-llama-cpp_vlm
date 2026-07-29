@@ -4,6 +4,13 @@ import gc
 import json
 import base64
 import random
+
+# Run before torch and llama_cpp load their native libraries. Once an OpenMP
+# runtime is initialized it cannot be safely replaced in the current process.
+from .openmp_diagnostics import warn_if_conflicting_openmp_runtimes
+
+warn_if_conflicting_openmp_runtimes()
+
 import torch
 
 import numpy as np
@@ -549,7 +556,7 @@ class llama_cpp_instruct_adv:
                 or getattr(handler, "clip_model_path", None)
             )
             if not mmproj_path:
-                 raise ValueError("Image input detected, but the loaded model is not configured with a mmproj module.")
+                raise ValueError("Image input detected, but the loaded model is not configured with a mmproj module.")
                 
             frames = images
             if video_input:

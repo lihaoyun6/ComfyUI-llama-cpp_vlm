@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -385,10 +385,12 @@ if (LLAMA_BUILD)
+         llama_cpp_python_install_target(mtmd)
+     endif()
+ 
+-    # Install Windows LLVM OpenMP runtime when available.
+-    # This must run before cleanup so the final wheel keeps runtime DLLs but
+-    # removes development-only files such as .lib, cmake/, and pkgconfig/.
+-    llama_cpp_python_install_windows_openmp_runtime()
++    # Only package LLVM OpenMP when the CPU backend was actually built with it.
++    # Packaging libomp for a GGML_OPENMP=OFF build can conflict with PyTorch's
++    # Intel OpenMP runtime in the embedding process.
++    if(GGML_OPENMP)
++        llama_cpp_python_install_windows_openmp_runtime()
++    endif()
+ 
+     # Run after all runtime targets are installed, including mtmd.
+     llama_cpp_python_cleanup_dev_files()
+diff --git a/llama_cpp/_ggml.py b/llama_cpp/_ggml.py
+--- a/llama_cpp/_ggml.py
++++ b/llama_cpp/_ggml.py
+@@ -38,7 +38,6 @@ def _preload_openmp_runtime():
+     libomp_path = (pathlib.Path(__file__).parent / "lib" / "libomp140.x86_64.dll")
+ 
+     if not libomp_path.exists():
+-        print(f"[llama-cpp-python] WARNING: bundled OpenMP runtime not found: {libomp_path}")
+         return
+ 
+     try:

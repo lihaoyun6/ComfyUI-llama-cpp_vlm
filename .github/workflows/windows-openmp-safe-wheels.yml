@@ -1,0 +1,61 @@
+name: Build Windows OpenMP-safe wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag that receives the wheels
+        required: true
+        default: openmp-safe-v0.3.44-cu128
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # CUDA 12.8 and Visual Studio 2022 must be installed on this runner.
+    runs-on: [self-hosted, Windows, X64, cuda-12.8]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build RTX 20/30/40/50 compatible wheel
+        shell: pwsh
+        run: |
+          $python = (Get-Command python).Source
+          .\tools\build_windows_openmp_safe.ps1 `
+            -PythonExe $python `
+            -CudaArchitectures "75;80;86;89;120"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp${{ matrix.python-version }}
+          path: dist/llama_cpp_python-*.whl
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-wheels
+          merge-multiple: true
+
+      - name: Publish wheels
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: Windows OpenMP-safe llama-cpp-python 0.3.44
+          files: release-wheels/*.whl
+          fail_on_unmatched_files: true
+          generate_release_notes: true
