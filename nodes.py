@@ -250,7 +250,7 @@ class LLAMA_CPP_STORAGE:
                 kwargs["force_reasoning"] = think_mode
                 kwargs["image_max_tokens"] = image_max_tokens
                 kwargs["image_min_tokens"] = image_min_tokens
-            elif chat_handler in ["MiniCPM-v4.5", "MiniCPM-v4.5-Thinking", "GLM-4.6V", "GLM-4.6V-Thinking", "Qwen3.5", "Qwen3.5-Thinking"]:
+            elif chat_handler in ["MiniCPM-v4.5", "MiniCPM-v4.5-Thinking", "GLM-4.6V", "GLM-4.6V-Thinking", "Qwen3.5", "Qwen3.5-Thinking", "Qwen3.6", "Qwen3.6-Thinking"]:
                 kwargs["enable_thinking"] = think_mode
 
             if _MTMD:
@@ -687,7 +687,7 @@ class llama_cpp_instruct_adv:
         if force_offload:
             LLAMA_CPP_STORAGE.clean()
         else:
-            if LLAMA_CPP_STORAGE.current_config and LLAMA_CPP_STORAGE.current_config["chat_handler"] in ["Qwen3.5", "Qwen3.5-Thinking"]:
+            if LLAMA_CPP_STORAGE.current_config and LLAMA_CPP_STORAGE.current_config["chat_handler"] in ["Qwen3.5", "Qwen3.5-Thinking", "Qwen3.6", "Qwen3.6-Thinking"]:
                 LLAMA_CPP_STORAGE.llm.n_tokens = 0
                 LLAMA_CPP_STORAGE.llm._ctx.memory_clear(True)
                 if LLAMA_CPP_STORAGE.llm.is_hybrid and LLAMA_CPP_STORAGE.llm._hybrid_cache_mgr is not None:
